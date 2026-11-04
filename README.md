@@ -134,4 +134,4 @@ Custom domains per tenant, white-label option for agencies, usage dashboard, tem
 
 ---
 
-**Author:** Andrii · [qeakflow.com](https://www.qeakflow.com)
+**Author:** Andrii Mahalias · [qeakflow.com](https://www.qeakflow.com)
