@@ -101,7 +101,7 @@ stateDiagram-v2
 ### 6.2 Provisioning as background jobs
 - **Why:** provisioning is slow and can fail halfway; it must not block webhooks or HTTP requests.
 - **How:** arq workers with Redis, jobs designed to be safely retried.
-- `**Idempotent provisioning & crash recovery** (State reconciliation, dangling container cleanup, and an automated rollback stack to safely handle workers dying mid-way)`
+- **Idempotent provisioning & crash recovery** (State reconciliation, dangling container cleanup, and an automated rollback stack to safely handle workers dying mid-way)
 
 ### 6.3 Webhook-driven billing
 - **Why:** Stripe is the source of truth for subscription state; the API reacts to events instead of polling.
