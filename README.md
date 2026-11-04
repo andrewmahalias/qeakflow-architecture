@@ -1,0 +1,137 @@
+# QeakFlow Architecture
+
+Design notes for **QeakFlow**, a managed, privacy-first email marketing platform for the DACH market, built as a multi-tenant service on top of [Listmonk](https://listmonk.app).
+
+This repository contains **documentation only**: diagrams, design decisions and lessons learned. The application code is proprietary and not published here.
+
+> Built and operated by a single engineer: backend, infrastructure, billing and provisioning.
+
+---
+
+## 1. Problem and constraints
+
+Small businesses in Germany want newsletters without Mailchimp's pricing jumps and without sending subscriber data to third parties (GDPR).
+
+Design constraints that shaped the architecture:
+
+- **Strong tenant isolation:** one customer's data and failures must not affect another's.
+- **Fully automated onboarding:** payment to a working workspace with no manual steps.
+- **Solo operation:** every component must be simple to run, observable and recoverable by one person.
+- **EU-hosted, minimal tracking by default.**
+
+## 2. System overview
+
+```mermaid
+flowchart LR
+  U[Customer] --> API[FastAPI: auth, plans, routing]
+  API --> PG[(PostgreSQL)]
+  API <-->|checkout, webhooks| S[Stripe]
+  API -->|enqueue job| R[(Redis)]
+  R --> W[arq worker: provisioning]
+  W --> D[Docker host]
+  D --> L1[Listmonk: tenant A]
+  D --> L2[Listmonk: tenant B]
+  L1 & L2 --> SMTP[SMTP: Amazon SES or customer-provided]
+```
+
+| Layer | Technology |
+|---|---|
+| API, auth, billing logic | FastAPI (Python) |
+| Data | PostgreSQL |
+| Background jobs | arq + Redis |
+| Tenant runtime | Docker / Docker Compose, one Listmonk instance per tenant |
+| Payments | Stripe (webhook-driven) |
+| Sending | Amazon SES or customer-provided SMTP |
+
+## 3. Tenant provisioning flow
+
+Payment triggers provisioning automatically; the customer never waits on a human.
+
+```mermaid
+sequenceDiagram
+  participant C as Customer
+  participant S as Stripe
+  participant A as FastAPI
+  participant R as Redis / arq
+  participant W as Worker
+  participant D as Docker
+  C->>S: Subscribe
+  S->>A: Webhook (checkout completed)
+  A->>A: Verify signature, record event once
+  A->>R: Enqueue provisioning job
+  R->>W: Deliver job
+  W->>W: Create tenant database and credentials
+  W->>D: Start isolated Listmonk container
+  W->>D: Configure instance (token-based auth)
+  W->>A: Mark tenant provisioned
+  A-->>C: Workspace ready
+```
+
+## 4. Onboarding state machine
+
+> Draft: adjust state names to match the implementation.
+
+```mermaid
+stateDiagram-v2
+  [*] --> PendingPayment
+  PendingPayment --> Provisioning: payment confirmed
+  Provisioning --> DomainSetup: instance ready
+  Provisioning --> Failed: error
+  Failed --> Provisioning: retry
+  DomainSetup --> DnsVerification: records published
+  DnsVerification --> Active: records verified
+  Active --> Deactivated: subscription ended
+  Deactivated --> CleanedUp: retention period passed
+  CleanedUp --> [*]
+```
+
+## 5. Sender-domain authentication
+
+- A **DKIM keypair is generated per tenant** during onboarding; the customer receives the DNS records to publish.
+- A **DNS verification service** (Python, `dnspython`) checks the published records before sending is enabled.
+- `[TODO: SPF / DMARC handling, retry and re-check strategy, how verification failures are shown to the user]`
+
+## 6. Key design decisions
+
+### 6.1 One Listmonk instance per tenant
+- **Why:** hard isolation of data and failures, simple per-tenant deletion for GDPR, no changes needed to Listmonk's single-tenant design.
+- **Trade-off:** higher resource cost per tenant and more orchestration work.
+- **Mitigation:** automated provisioning and cleanup, so operational cost stays low for one person.
+
+### 6.2 Provisioning as background jobs
+- **Why:** provisioning is slow and can fail halfway; it must not block webhooks or HTTP requests.
+- **How:** arq workers with Redis, jobs designed to be safely retried.
+- `[TODO: idempotency approach, what happens if a job dies mid-way]`
+
+### 6.3 Webhook-driven billing
+- **Why:** Stripe is the source of truth for subscription state; the API reacts to events instead of polling.
+- `[TODO: how duplicate and out-of-order events are handled]`
+
+### 6.4 Bring-your-own SMTP
+- **Why:** lets customers use their own sending reputation and keeps deliverability responsibility transparent.
+- `[TODO: why SES as default, rate-limit handling]`
+
+## 7. Failure modes and how they were handled
+
+| Problem | Cause | Resolution |
+|---|---|---|
+| Provisioned instance rejected API calls after upgrading Listmonk to v6 | Authentication changed to token-based | Moved the provisioning flow to token-based auth and verified it end to end |
+| `[TODO]` | `[TODO]` | `[TODO]` |
+| `[TODO]` | `[TODO]` | `[TODO]` |
+
+## 8. Lifecycle and cleanup
+
+- Scheduled job deactivates tenants whose subscription ended and removes their resources after a retention period.
+- `[TODO: what gets deleted, what is kept for billing, how deletion is verified]`
+
+## 9. What I would do differently
+
+`[TODO: 2-3 honest lessons, e.g. things you'd design earlier, simplify or measure from day one]`
+
+## 10. Roadmap
+
+Custom domains per tenant, white-label option for agencies, usage dashboard, template builder, Zapier/webhook integrations.
+
+---
+
+**Author:** Andrii · [qeakflow.com](https://www.qeakflow.com)
