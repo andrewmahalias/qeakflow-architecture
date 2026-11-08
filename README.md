@@ -130,7 +130,6 @@ stateDiagram-v2
 
 ### 6.4 Bring-your-own SMTP
 - **Why:** lets customers use their own sending reputation and keeps deliverability responsibility transparent.
-- `[TODO: why SES as default, rate-limit handling]`
 
 ## 7. Failure modes and how they were handled
 
