@@ -131,24 +131,16 @@ stateDiagram-v2
 ### 6.4 Bring-your-own SMTP
 - **Why:** lets customers use their own sending reputation and keeps deliverability responsibility transparent.
 
-## 7. Failure modes and how they were handled
-
-| Problem | Cause | Resolution |
-|---|---|---|
-| Provisioned instance rejected API calls after upgrading Listmonk to v6 | Authentication changed to token-based | Moved the provisioning flow to token-based auth and verified it end to end |
-| `[TODO]` | `[TODO]` | `[TODO]` |
-| `[TODO]` | `[TODO]` | `[TODO]` |
-
-## 8. Lifecycle and cleanup
+## 7. Lifecycle and cleanup
 
 - Scheduled job deactivates tenants whose subscription ended and removes their resources after a retention period.
 - `[TODO: what gets deleted, what is kept for billing, how deletion is verified]`
 
-## 9. What I would do differently
+## 8. Engineering Challenges & Solutions
 
 `[TODO: 2-3 honest lessons, e.g. things you'd design earlier, simplify or measure from day one]`
 
-## 10. Roadmap
+## 9. Roadmap
 
 Custom domains per tenant, white-label option for agencies, usage dashboard, template builder, Zapier/webhook integrations.
 
