@@ -69,7 +69,6 @@ sequenceDiagram
 
 ## 4. Onboarding state machine
 
-> Draft: adjust state names to match the implementation.
 
 ```mermaid
 stateDiagram-v2
