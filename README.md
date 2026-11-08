@@ -127,7 +127,7 @@ stateDiagram-v2
 
 ### 6.3 Webhook-driven billing
 - **Why:** Stripe is the source of truth for subscription state; the API reacts to events instead of polling.
-- `[TODO: how duplicate and out-of-order events are handled]`
+- **How:** verifies each Stripe webhook signature, stores the Stripe event ID with a unique constraint to prevent duplicate processing, and processes events idempotently. For out-of-order events, it retrieves the latest subscription state from Stripe before updating the local subscription record and synchronizing the tenant's Listmonk instance.
 
 ### 6.4 Bring-your-own SMTP
 - **Why:** lets customers use their own sending reputation and keeps deliverability responsibility transparent.
