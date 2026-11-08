@@ -134,7 +134,6 @@ stateDiagram-v2
 ## 7. Lifecycle and cleanup
 
 - Scheduled job deactivates tenants whose subscription ended and removes their resources after a retention period.
-- `[TODO: what gets deleted, what is kept for billing, how deletion is verified]`
 
 ## 8. Engineering Challenges & Solutions
 
