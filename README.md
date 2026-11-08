@@ -85,12 +85,34 @@ stateDiagram-v2
   CleanedUp --> [*]
 ```
 
-## 5. Sender-domain authentication
+## 5. **Sender-domain authentication**
 
-- A **DKIM keypair is generated per tenant** during onboarding; the customer receives the DNS records to publish.
-- A **DNS verification service** (Python, `dnspython`) checks the published records before sending is enabled.
-- `[TODO: SPF / DMARC handling, retry and re-check strategy, how verification failures are shown to the user]`
+- A DKIM keypair is generated per tenant during onboarding; the customer receives the DNS records to publish.
+- A DNS verification service (Python, `dnspython`) checks the published records before sending is enabled.
 
+**SPF.** A domain may publish only one SPF record, and most customers already have one. QeakFlow therefore shows the `include:` mechanism for the tenant's SMTP provider to merge into the existing record, never a second record. Verification parses the record instead of comparing strings. It checks that the provider's include is present and the record ends in `~all` or `-all`. It also flags multiple SPF records and records over the 10-DNS-lookup limit, both of which cause a permanent SPF error.
+
+**DKIM.** Verification resolves `<selector>._domainkey.<domain>`, joins multi-string TXT values, normalizes whitespace, and compares the `p=` key with the stored public key.
+
+**DMARC.** DMARC is advisory and does not block sending. Verification only checks that a valid `v=DMARC1` record with a `p=` tag exists, and accepts any existing policy. For new setups we suggest `p=none` with an `rua` address, then tightening to `quarantine` once reports look clean.
+
+**Gating.** Sending is enabled when SPF and DKIM pass. A missing DMARC record shows a warning.
+
+**Re-check strategy.**
+- A manual "Verify" button, rate-limited per domain.
+- After a failed check, automatic background re-checks with backoff: 1 min, 5 min, 15 min, 1 h, then every 6 h for up to 72 h to cover DNS propagation. After that the status becomes `expired` and the user can restart.
+- Queries go to public resolvers rather than the host's resolver.
+- Timeouts and SERVFAIL are treated as `unknown` and retried. Only a definitive "no record" counts as `missing`, and a single timeout never flips a verified domain to failed.
+- Verified domains are re-checked daily. If records disappear, the domain becomes `degraded`, the customer is notified, and sending is paused only after a grace period (e.g. 72 h).
+
+**Failure display.**
+- Each record (SPF, DKIM, DMARC) shows its own status: `valid`, `missing`, `mismatch`, `conflict` or `unknown`.
+- Each record shows the exact host and value with a copy button, the last-checked time, and the next automatic check.
+- Each failure comes with a specific hint, never a generic "verification failed":
+  - "Many registrars append the domain automatically, so enter `qeakflow._domainkey`, not the full name."
+  - "Remove surrounding quotes."
+  - "You have two SPF records, merge them into one."
+- The last result is persisted, so the page loads without a live DNS lookup.
 ## 6. Key design decisions
 
 ### 6.1 One Listmonk instance per tenant
