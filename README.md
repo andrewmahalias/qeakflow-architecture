@@ -133,15 +133,44 @@ stateDiagram-v2
 
 ## 7. Lifecycle and cleanup
 
-- Scheduled job deactivates tenants whose subscription ended and removes their resources after a retention period.
+Tenant states: `active` → `past_due` → `frozen` → `deactivated`.
+
+- **Payment failure.** The subscription goes `past_due` and Stripe retries the charge. The tenant keeps working during the grace period (7 days, configurable).
+- **Freeze.** When the grace period expires, the tenant's container is stopped and the customer is emailed. Data is kept, but sending and API access stop.
+- **Reactivation.** If the customer pays within the retention period, the container restarts with all data intact.
+- **Purge.** After the retention period (12 months, configurable), the container and its volumes are removed. The tenant database and DB user are dropped, config files are wiped, stored SMTP credentials are deleted, and the customer gets a confirmation email.
+- **Voluntary cancellation.** The subscription is set to cancel at period end. Access continues until then, and the tenant follows the same freeze and purge path.
+- **Execution.** A daily scheduled job processes each tenant in its own transaction, so one failure doesn't block the batch. Purging runs as a background job with a per-tenant lock and can safely be re-run.
+- **Before deletion.** Customers get a reminder email before the purge date so they can export their contacts. Backups keep deleted data until they rotate out.
 
 ## 8. Engineering Challenges & Solutions
 
-`[TODO: 2-3 honest lessons, e.g. things you'd design earlier, simplify or measure from day one]`
+**1. Provisioning is a distributed workflow, not a function call.**
+The first version created the database, started the container, and configured the instance inside one HTTP request. It took 30-60 seconds and had no retries. A failure halfway left orphaned resources, for example a dropped database with a container still running and holding its port. I moved it to a background worker with a per-tenant lock, a rollback stack, and an explicit status stored in the database (`provisioning`, `active`, `error`). I should have built it that way from day one, because the happy path is the easy 20% of the work and the failure paths are the rest.
+
+**2. Verify upstream behavior with a real instance before building on it.**
+I lost time to assumptions about Listmonk's API. v6 rejects Basic Auth and needs token auth. The API user's token comes back in the `password` field. The health endpoint returns 403 before the instance is initialized. I now treat each provisioning step as a contract to check against a real container, and I'd run that as an integration test in CI from the start instead of finding the differences one failed provision at a time.
+
+**3. Isolation has a per-tenant cost and a full lifecycle, so measure and design both early.**
+A dedicated container and database per tenant gives strong data separation, but every idle tenant has a memory baseline. In my setup, 10 idle tenants take roughly 1.5 GB. That is a rough measurement, not a benchmark. I'd record the per-tenant footprint from the first prototype so pricing and server sizing rest on numbers. I also designed teardown late. Freezing after failed payments, purging after a retention period, and deleting SMTP credentials all came after provisioning, and they are as important as creating tenants.
 
 ## 9. Roadmap
 
-Custom domains per tenant, white-label option for agencies, usage dashboard, template builder, Zapier/webhook integrations.
+Planned, in rough priority order. No dates; the order follows beta feedback.
+
+**Next**
+- Usage dashboard: contacts and sends against plan limits.
+- Preflight check: test send to your own inbox with SPF/DKIM results before the first campaign.
+- Secondary SMTP slot: automatic failover when the primary provider rate-limits.
+
+**Later**
+- Webhooks and REST API access for custom integrations.
+- Multiple workspaces per account, for agencies managing several clients.
+
+**Exploring**
+- White-label (custom app domain, branding) for agencies.
+- Zapier integration.
+- Template builder, if Listmonk's editor proves insufficient.
 
 ---
 
